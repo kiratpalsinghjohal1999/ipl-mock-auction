@@ -13,6 +13,10 @@ import {
 import { Link } from 'react-router-dom';
 
 function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const correctPassword = 'auction123';
+
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [newPlayer, setNewPlayer] = useState({ name: '', basePrice: '', type: '' });
@@ -207,69 +211,87 @@ function App() {
     }
   };
 
-  return (
-    <div style={{ padding: '20px', fontFamily: 'Arial', display: 'flex', gap: '30px' }}>
-      <div style={{ flex: 1 }}>
-        <h1>Mock IPL Auction - Players</h1>
-
-        <h2>Pending Players (Not Yet Bid)</h2>
-        <ul>
-          {players.filter(p => !p.bidded).map(player => (
-            <li key={player.id}>
-              <strong>{player.name}</strong> - ${player.basePrice} - {player.type}
-            </li>
-          ))}
-        </ul>
-
-        <h2>Sold Players</h2>
-        <ul>
-          {players.filter(p => p.sold && p.bidded).map(player => (
-            <li key={player.id}>
-              <strong>{player.name}</strong> - ${player.basePrice} - {player.type}
-            </li>
-          ))}
-        </ul>
-
-        <h2>Unsold Players</h2>
-        <ul>
-          {players.filter(p => !p.sold && p.bidded).map(player => (
-            <li key={player.id}>
-              <strong>{player.name}</strong> - ${player.basePrice} - {player.type}
-            </li>
-          ))}
-        </ul>
-
-        <h2>Add New Player</h2>
-        <input type="text" placeholder="Name" value={newPlayer.name} onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })} />
-        <input type="number" placeholder="Base Price" value={newPlayer.basePrice} onChange={e => setNewPlayer({ ...newPlayer, basePrice: e.target.value })} />
-        <input type="text" placeholder="Type (e.g., Batsman)" value={newPlayer.type} onChange={e => setNewPlayer({ ...newPlayer, type: e.target.value })} />
-        <button onClick={handleAddPlayer}>Add Player</button>
-
+  if (!authenticated) {
+    return (
+      <div style={{ padding: '40px', fontFamily: 'Arial', textAlign: 'center' }}>
+        <h2>Enter Admin Password</h2>
+        <input
+          type="password"
+          placeholder="Password"
+          value={passwordInput}
+          onChange={e => setPasswordInput(e.target.value)}
+          style={{ padding: '8px', width: '200px' }}
+        />
         <br /><br />
-        <Link to="/teams">Go to Team View</Link> | <Link to="/round2">Go to Round 2</Link>
+        <button onClick={() => {
+          if (passwordInput === correctPassword) {
+            setAuthenticated(true);
+          } else {
+            alert('Incorrect password.');
+          }
+        }}>
+          Enter
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '20px', fontFamily: 'Arial', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+        {['Pending Players (Not Yet Bid)', 'Sold Players', 'Unsold Players'].map((category, i) => {
+          const list = i === 0
+            ? players.filter(p => !p.bidded)
+            : i === 1
+              ? players.filter(p => p.sold && p.bidded)
+              : players.filter(p => !p.sold && p.bidded);
+          return (
+            <div key={category} style={{ flex: 1, minWidth: '250px', maxHeight: '200px', overflowY: 'auto', border: '1px solid #ccc', padding: '10px' }}>
+              <h2>{category}</h2>
+              <ul>
+                {list.map(player => (
+                  <li key={player.id}><strong>{player.name}</strong> - ${player.basePrice} - {player.type}</li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </div>
 
-      <div style={{ flex: 1 }}>
-        <h2>Auction Control Panel</h2>
-        <select value={selectedPlayerId} onChange={e => setSelectedPlayerId(e.target.value)}>
-          <option value="">-- Select a Player --</option>
-          {players.map(player => (
-            <option key={player.id} value={player.id}>{player.name} {player.sold ? "(Sold)" : ""}</option>
-          ))}
-        </select>
-        <input type="number" placeholder="Bid Amount" value={bidAmount} onChange={e => setBidAmount(e.target.value)} />
-        <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)}>
-          <option value="">-- Select a Team --</option>
-          {teams.map(team => (
-            <option key={team.id} value={team.id}>{team.Owner} (${Number(team.Purse || 0).toLocaleString()})</option>
-          ))}
-        </select>
-        <br /><br />
-        <button onClick={assignPlayerToTeam}>Assign Player to Team</button>
-        <button onClick={resetSelection} style={{ marginLeft: '5px' }}>Reset</button>
-        <button onClick={markPlayerAsUnsold} style={{ marginLeft: '5px', backgroundColor: 'orange', color: 'white' }}>Mark as Unsold</button>
-        <button onClick={undoSold} style={{ marginLeft: '5px', backgroundColor: 'green', color: 'white' }}>Undo Sold</button>
-        <button onClick={resetAuction} style={{ marginLeft: '5px', backgroundColor: 'red', color: 'white' }}>Reset Auction</button>
+      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }}>
+          <h2>Add New Player</h2>
+          <input type="text" placeholder="Name" value={newPlayer.name} onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })} />
+          <input type="number" placeholder="Base Price" value={newPlayer.basePrice} onChange={e => setNewPlayer({ ...newPlayer, basePrice: e.target.value })} />
+          <input type="text" placeholder="Type (e.g., Batsman)" value={newPlayer.type} onChange={e => setNewPlayer({ ...newPlayer, type: e.target.value })} />
+          <button onClick={handleAddPlayer} style={{ padding: '10px 16px', fontSize: '16px', marginTop: '10px' }}>Add Player</button>
+
+          <br /><br />
+          <Link to="/teams">Go to Team View</Link> | <Link to="/round2">Go to Round 2</Link>
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <h2>Auction Control Panel</h2>
+          <select value={selectedPlayerId} onChange={e => setSelectedPlayerId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
+            <option value="">-- Select a Player --</option>
+            {players.map(player => (
+              <option key={player.id} value={player.id}>{player.name} {player.sold ? "(Sold)" : ""}</option>
+            ))}
+          </select>
+          <input type="number" placeholder="Bid Amount" value={bidAmount} onChange={e => setBidAmount(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }} />
+          <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
+            <option value="">-- Select a Team --</option>
+            {teams.map(team => (
+              <option key={team.id} value={team.id}>{team.Owner} (${Number(team.Purse || 0).toLocaleString()})</option>
+            ))}
+          </select>
+          <br /><br />
+          <button onClick={assignPlayerToTeam} style={{ padding: '10px 16px', fontSize: '16px', fontWeight: 'bold',backgroundColor: 'green', color: 'white' }}>Assign Player to Team</button>
+          <button onClick={resetSelection} style={{ marginLeft: '5px', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Reset</button>
+          <button onClick={markPlayerAsUnsold} style={{ marginLeft: '5px', backgroundColor: 'orange', color: 'white', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Mark as Unsold</button>
+          <button onClick={undoSold} style={{ marginLeft: '5px', backgroundColor: 'blue', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Undo Sold</button>
+          <button onClick={resetAuction} style={{ marginLeft: '5px', backgroundColor: 'red', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Reset Auction</button>
+        </div>
       </div>
     </div>
   );

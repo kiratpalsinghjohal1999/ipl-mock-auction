@@ -9,10 +9,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Router>
       <Routes>
-        <Route path="/" element={<TeamView />} /> {/* 👈 default to TeamView */}
-        <Route path="/admin" element={<App />} /> {/* 👈 admin-only access */}
-        <Route path="/round2" element={<Round2 />} />
+        <Route path="/admin" element={<App />} />      {/* 👈 admin access only */}
         <Route path="/teams" element={<TeamView />} />
+        <Route path="/round2" element={<Round2 />} />
+        <Route path="/" element={<TeamView />} />       {/* 👈 default fallback */}
       </Routes>
     </Router>
   </React.StrictMode>
