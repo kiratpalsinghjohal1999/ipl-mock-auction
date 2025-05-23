@@ -1,6 +1,7 @@
 import { toast } from 'react-toastify';
 import { saveAs } from 'file-saver';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 import { useEffect, useState } from 'react';
 import { db } from './firebase';
@@ -29,7 +30,6 @@ function Admin() {
   const [teams, setTeams] = useState([]);
   const [newPlayer, setNewPlayer] = useState({ name: '', basePrice: '', type: '' });
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState('');
   const [bidAmount, setBidAmount] = useState('');
   const [currentBid, setCurrentBid] = useState(null);
   const [creditAmount, setCreditAmount] = useState('');
@@ -82,17 +82,55 @@ function Admin() {
     };
   }, []);
 
+  const handleFileUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = async (event) => {
+    try {
+      const data = new Uint8Array(event.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const players = XLSX.utils.sheet_to_json(sheet);
+
+      const batchAdd = players.map(async (row) => {
+        const { Name, Type, BasePrice } = row;
+        if (!Name || !Type || !BasePrice) return;
+
+        await setDoc(doc(db, 'players', Name), {
+          name: Name,
+          type: Type,
+          basePrice: Number(BasePrice),
+          sold: false,
+          bidded: false,
+        });
+      });
+
+      await Promise.all(batchAdd);
+      alert('Players uploaded successfully!');
+    } catch (error) {
+      console.error('Error uploading players:', error);
+      alert('Failed to upload players.');
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+};
+
 
 
   const handleAddPlayer = async () => {
     try {
-      await addDoc(collection(db, 'players'), {
-        name: newPlayer.name,
-        basePrice: Number(newPlayer.basePrice),
-        sold: false,
-        bidded: false,
-        type: newPlayer.type
-      });
+      await setDoc(doc(db, 'players', newPlayer.name), {
+  name: newPlayer.name,
+  basePrice: Number(newPlayer.basePrice),
+  type: newPlayer.type,
+  sold: false,
+  bidded: false
+});
       setNewPlayer({ name: '', basePrice: '', type: '' });
       alert('Player added!');
     } catch (error) {
@@ -136,6 +174,12 @@ function Admin() {
       })
     });
 
+    await setDoc(doc(db, 'auction', 'announcement'), {
+  text: ` ${player.name} was sold to ${team.Owner} for $${currentBid.currentBid}`
+});
+
+
+
     // Update player status
     await updateDoc(playerRef, {
       sold: true,
@@ -171,6 +215,10 @@ function Admin() {
       type: player.type,
       currentBid: Number(bidAmount),
       highestBidder: ''
+    });
+
+    await setDoc(doc(db, 'auction', 'announcement'), {
+      text: `Bidding started for ${player.name}`
     });
 
     alert(`Bidding started for ${player.name} at $${bidAmount}`);
@@ -235,6 +283,8 @@ function Admin() {
         bidded: false
       });
 
+      
+
       alert("Player moved to pending and removed from team.");
     } catch (error) {
       console.error("Error undoing sold status:", error);
@@ -270,6 +320,10 @@ function Admin() {
       currentBid: 0,
       highestBidder: ''
     });
+    await setDoc(doc(db, 'auction', 'announcement'), {
+  text: `Player ${playerSnap.data().name} went unsold`
+});
+
 
     alert(`Player ${playerSnap.data().name} marked as unsold.`);
   } catch (error) {
@@ -356,11 +410,13 @@ const generateAuctionReport = () => {
       );
 
       const teamUpdates = teamSnapshot.docs.map(docSnap =>
-        updateDoc(doc(db, 'Teams', docSnap.id), {
-          Purse: 200,
-          players: []
-        })
-      );
+  updateDoc(doc(db, 'Teams', docSnap.id), {
+    Purse: 250,
+    players: [],
+    extraCredits: 0  // ✅ Reset extra credits too
+  })
+);
+
 
       await Promise.all([...playerUpdates, ...teamUpdates]);
       alert('Auction has been reset. All players and teams have been reset.');
@@ -403,25 +459,37 @@ const generateAuctionReport = () => {
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
           <h2>Auction Control Panel</h2>
-          <select value={selectedPlayerId} onChange={e => setSelectedPlayerId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
-            <option value="">-- Select a Player --</option>
-            {players.map(player => (
-              <option key={player.id} value={player.id}>{player.name} {player.sold ? "(Sold)" : ""}</option>
-            ))}
-          </select>
+          <select
+  value={selectedPlayerId}
+  onChange={e => {
+    const selectedId = e.target.value;
+    setSelectedPlayerId(selectedId);
+
+    const selected = players.find(p => p.id === selectedId);
+    if (selected) {
+      setBidAmount(selected.basePrice); // auto-set bid amount
+    } else {
+      setBidAmount('');
+    }
+  }}
+  style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}
+>
+  <option value="">-- Select a Player --</option>
+  {players.map(player => (
+    <option key={player.id} value={player.id}>
+      {player.name} {player.sold ? "(Sold)" : ""}
+    </option>
+  ))}
+</select>
+
           <input type="number" placeholder="Bid Amount" value={bidAmount} onChange={e => setBidAmount(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }} />
-          <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
-            <option value="">-- Select a Team --</option>
-            {teams.map(team => (
-              <option key={team.id} value={team.id}>{team.Owner} (${Number(team.Purse || 0).toLocaleString()})</option>
-            ))}
-          </select>
           <br /><br />
+
           <button
             onClick={startBidding}
             style={{ marginLeft: '5px', backgroundColor: 'purple', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Start Bidding
         </button>
-          <button onClick={assignPlayerToTeam} style={{ padding: '10px 16px', fontSize: '16px', fontWeight: 'bold',backgroundColor: 'green', color: 'white' }}>Assign Player to Team</button>
+          <button onClick={assignPlayerToTeam} style={{ padding: '10px 16px', fontSize: '16px', fontWeight: 'bold',backgroundColor: 'green', color: 'white' }}>Sell Player</button>
           <button onClick={resetSelection} style={{ marginLeft: '5px', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Reset</button>
           <button onClick={markPlayerAsUnsold} style={{ marginLeft: '5px', backgroundColor: 'orange', color: 'white', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Mark as Unsold</button>
           <button onClick={undoSold} style={{ marginLeft: '5px', backgroundColor: 'blue', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Undo Sold</button>
@@ -469,8 +537,28 @@ const generateAuctionReport = () => {
           <h2>Add New Player</h2>
           <input type="text" placeholder="Name" value={newPlayer.name} onChange={e => setNewPlayer({ ...newPlayer, name: e.target.value })} />
           <input type="number" placeholder="Base Price" value={newPlayer.basePrice} onChange={e => setNewPlayer({ ...newPlayer, basePrice: e.target.value })} />
-          <input type="text" placeholder="Type (e.g., Batsman)" value={newPlayer.type} onChange={e => setNewPlayer({ ...newPlayer, type: e.target.value })} />
+          <select
+  value={newPlayer.type}
+  onChange={e => setNewPlayer({ ...newPlayer, type: e.target.value })}
+  style={{ padding: '8px', fontSize: '16px', marginTop: '8px' }}
+>
+  <option value="">-- Select Type --</option>
+  <option value="Batsman">Batsman</option>
+  <option value="Batsman">Batsman/Wicket-Keeper</option>
+  <option value="Bowler">Bowler</option>
+  <option value="Bowler">Bowler/Wicket-Keeper</option>
+  <option value="All-rounder">All-rounder</option>
+  <option value="Batting All-rounder">Batting All-rounder</option>
+  <option value="Bowling All-rounder">Bowling All-rounder</option>
+</select>
+
           <button onClick={handleAddPlayer} style={{ padding: '10px 16px', fontSize: '16px', marginTop: '10px' }}>Add Player</button>
+
+       <h3>Upload Players from Excel</h3>
+<input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} />
+
+
+
 
           <h2>Add Extra Credits to Team</h2>
   <select

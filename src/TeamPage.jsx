@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { useParams, Link } from 'react-router-dom';
 import CurrentBidBox from './CurrentBidBox';
+import AnnouncementBanner from './AnnouncementBanner';
 
 function TeamPage() {
   const { owner } = useParams();
@@ -20,8 +21,22 @@ function TeamPage() {
   const [teams, setTeams] = useState([]);
   const [players, setPlayers] = useState([]);
   const [currentBid, setCurrentBid] = useState(null);
+  const [announcement, setAnnouncement] = useState('');
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
 
-  // Fetch stored password
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'auction', 'announcement'), (docSnap) => {
+      if (docSnap.exists()) {
+        const msg = docSnap.data().text || '';
+        if (msg) {
+          setAnnouncement(msg);
+          setShowAnnouncement(true);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     const fetchPassword = async () => {
       const snapshot = await getDocs(collection(db, 'Teams'));
@@ -32,33 +47,22 @@ function TeamPage() {
         setStoredPassword(matchingTeam.data().password || '');
       }
     };
-
     const alreadyLoggedIn = sessionStorage.getItem(`auth-${owner.toLowerCase()}`) === 'true';
     if (alreadyLoggedIn) {
       setAuthenticated(true);
     }
-
     fetchPassword();
   }, [owner]);
 
-  // Real-time listeners
   useEffect(() => {
     const unsubscribeTeams = onSnapshot(collection(db, 'Teams'), (snapshot) => {
-      const teamList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const teamList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setTeams(teamList);
     });
-
     const unsubscribePlayers = onSnapshot(collection(db, 'players'), (snapshot) => {
-      const playerList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const playerList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPlayers(playerList);
     });
-
     const unsubscribeBid = onSnapshot(doc(db, 'auction', 'currentBid'), (docSnap) => {
       if (docSnap.exists()) {
         setCurrentBid(docSnap.data());
@@ -66,7 +70,6 @@ function TeamPage() {
         setCurrentBid(null);
       }
     });
-
     return () => {
       unsubscribeTeams();
       unsubscribePlayers();
@@ -76,9 +79,18 @@ function TeamPage() {
 
   const categorize = (list) => {
     return {
-      batsmen: list.filter(p => p.type.toLowerCase() === 'batsman'),
-      bowlers: list.filter(p => p.type.toLowerCase() === 'bowler'),
-      allrounders: list.filter(p => p.type.toLowerCase().includes('all-rounder')),
+      batsmen: list.filter(p => {
+        const type = p.type?.toLowerCase() || '';
+        return type.includes('batsman') && !type.includes('all-rounder');
+      }),
+      bowlers: list.filter(p => {
+        const type = p.type?.toLowerCase() || '';
+        return type.includes('bowler') && !type.includes('all-rounder');
+      }),
+      allrounders: list.filter(p => {
+        const type = p.type?.toLowerCase() || '';
+        return type.includes('all-rounder') || type.includes('batting all-rounder') || type.includes('bowling all-rounder');
+      }),
     };
   };
 
@@ -90,12 +102,10 @@ function TeamPage() {
   const incrementBid = async (amount) => {
     if (!currentBid || !team?.id) return;
     const newBid = currentBid.currentBid + amount;
-    const playerId = currentBid.playerId;
-
     await updateDoc(doc(db, 'auction', 'currentBid'), {
       currentBid: newBid,
       highestBidder: team.id,
-      playerId: playerId,
+      playerId: currentBid.playerId,
       name: currentBid.name,
       type: currentBid.type
     });
@@ -106,16 +116,13 @@ function TeamPage() {
     const playerId = currentBid.playerId;
     const highestBidderId = currentBid.highestBidder;
     const finalPrice = currentBid.currentBid;
-
     const teamRef = doc(db, 'Teams', highestBidderId);
     const teamSnap = await getDoc(teamRef);
     const teamData = teamSnap.data();
-
     if (!teamData || teamData.Purse < finalPrice) {
       alert("Team does not have enough purse or team not found.");
       return;
     }
-
     await updateDoc(teamRef, {
       Purse: teamData.Purse - finalPrice,
       players: [...(teamData.players || []), {
@@ -124,12 +131,10 @@ function TeamPage() {
         type: currentBid.type
       }]
     });
-
     await updateDoc(doc(db, 'players', playerId), {
       sold: true,
       bidded: true
     });
-
     await updateDoc(doc(db, 'auction', 'currentBid'), {
       currentBid: 0,
       highestBidder: '',
@@ -137,11 +142,9 @@ function TeamPage() {
       type: '',
       playerId: ''
     });
-
     alert(`Player ${currentBid.name} sold to ${teamData.Owner} for $${finalPrice}`);
   };
 
-  // Show password prompt if not authenticated
   if (!authenticated) {
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -172,47 +175,52 @@ function TeamPage() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
+      <AnnouncementBanner
+        message={announcement}
+        visible={showAnnouncement}
+        onHide={() => setShowAnnouncement(false)}
+      />
+
       <Link to="/teams">← Back to Team Overview</Link>
       <h1 style={{ textAlign: 'center' }}>Your Team: {team?.Owner}</h1>
 
       <CurrentBidBox currentBid={currentBid} teams={teams} />
 
-      {/* Bid Buttons */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
-        {(() => {
-          const bid = currentBid?.currentBid || 0;
-          const maxAllowed = team?.Purse || 0;
-          const increments = bid < 25 ? [5] : [2, 3, 4, 5];
+      {currentBid?.playerId && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+          {(() => {
+            const bid = currentBid?.currentBid || 0;
+            const maxAllowed = team?.Purse || 0;
+            const increments = bid < 25 ? [5] : [2, 3, 4, 5];
 
-          return increments.map(amount => {
-            const notEnough = (bid + amount) > maxAllowed;
+            return increments.map(amount => {
+              const notEnough = (bid + amount) > maxAllowed;
+              return (
+                <button
+                  key={amount}
+                  onClick={() => {
+                    if (notEnough) {
+                      alert("Not enough purse to place this bid.");
+                      return;
+                    }
+                    incrementBid(amount);
+                  }}
+                  style={{
+                    padding: '10px',
+                    minWidth: '40px',
+                    fontSize: '16px',
+                    opacity: notEnough ? 0.5 : 1,
+                    cursor: notEnough ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  +{amount}
+                </button>
+              );
+            });
+          })()}
+        </div>
+      )}
 
-            return (
-              <button
-                key={amount}
-                onClick={() => {
-                  if (notEnough) {
-                    alert("Not enough purse to place this bid.");
-                    return;
-                  }
-                  incrementBid(amount);
-                }}
-                style={{
-                  padding: '10px',
-                  minWidth: '40px',
-                  fontSize: '16px',
-                  opacity: notEnough ? 0.5 : 1,
-                  cursor: notEnough ? 'not-allowed' : 'pointer'
-                }}
-              >
-                +{amount}
-              </button>
-            );
-          });
-        })()}
-      </div>
-
-      {/* Team Roster & Purse Info */}
       <div style={{ backgroundColor: '#f0f0f0', padding: '15px', borderRadius: '8px', marginBottom: '20px', maxHeight: '300px', overflowY: 'auto' }}>
         <p>
           <strong>Remaining Purse:</strong> ${team?.Purse?.toLocaleString() || 0}
@@ -220,7 +228,6 @@ function TeamPage() {
             <span style={{ color: 'green', fontSize: '14px' }}> (includes +${team.extraCredits} credits)</span>
           ) : null}
         </p>
-
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '15px' }}>
           <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
             <h4>Batsmen</h4>
@@ -237,19 +244,99 @@ function TeamPage() {
         </div>
       </div>
 
-      {/* Pending & Unsold */}
-      <div style={{ marginTop: '40px' }}>
+               <div style={{ marginTop: '40px' }}>
         <h2>Pending Players</h2>
-        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #ccc', padding: '10px', marginBottom: '20px' }}>
-          {pendingPlayers.map(p => <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>)}
-        </div>
+        {(() => {
+          const { batsmen, bowlers, allrounders } = categorize(pendingPlayers);
+          return (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+              <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+                <h4>Batsmen</h4>
+                {batsmen.map(p => (
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
 
-        <h2>Unsold Players</h2>
-        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #ccc', padding: '10px' }}>
-          {unsoldPlayers.map(p => <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>)}
-        </div>
+
+                ))}
+              </div>
+              <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+                <h4>Bowlers</h4>
+                {bowlers.map(p => (
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
+
+
+                ))}
+              </div>
+              <div style={{ flex: 1, paddingLeft: '10px' }}>
+                <h4>All-rounders</h4>
+                {allrounders.map(p => (
+                  <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        <h2 style={{ marginTop: '30px' }}>Unsold Players</h2>
+        {(() => {
+          const { batsmen, bowlers, allrounders } = categorize(unsoldPlayers);
+          return (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+              <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+                <h4>Batsmen</h4>
+                {batsmen.map(p => (
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
+
+
+                ))}
+              </div>
+              <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+                <h4>Bowlers</h4>
+                {bowlers.map(p => (
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
+
+
+                ))}
+              </div>
+              <div style={{ flex: 1, paddingLeft: '10px' }}>
+                <h4>All-rounders</h4>
+                {allrounders.map(p => (
+                  <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
+
     </div>
+
+    ///////
+
+          
+
+    //////
+
+    
   );
 }
 

@@ -10,7 +10,7 @@ function CurrentBidBox({ currentBid, teams }) {
   return (
     <div style={{ backgroundColor: '#ffdddd', border: '1px solid red', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
       {isInactive ? (
-        <h2 style={{ margin: 0 }}>No bidding at the moment</h2>
+        <h2 style={{ margin: 0 }}>No Bidding at the moment</h2>
       ) : (
         <>
           <h2>Currently Bidding:</h2>

@@ -3,12 +3,32 @@ import { db } from './firebase';
 import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 import CurrentBidBox from './CurrentBidBox';
+import AnnouncementBanner from './AnnouncementBanner';
+
 
 
 function TeamView() {
   const [teams, setTeams] = useState([]);
   const [players, setPlayers] = useState([]);
   const [currentBid, setCurrentBid] = useState(null);
+
+  const [announcement, setAnnouncement] = useState('');
+const [showAnnouncement, setShowAnnouncement] = useState(false);
+
+useEffect(() => {
+  const unsubscribe = onSnapshot(doc(db, 'auction', 'announcement'), (docSnap) => {
+    if (docSnap.exists()) {
+      const msg = docSnap.data().text || '';
+      if (msg) {
+        setAnnouncement(msg);
+        setShowAnnouncement(true);
+      }
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+
 
 
   useEffect(() => {
@@ -44,12 +64,25 @@ function TeamView() {
   }, []);
 
   const categorize = (list) => {
-    return {
-      batsmen: list.filter(p => p.type.toLowerCase() === 'batsman'),
-      bowlers: list.filter(p => p.type.toLowerCase() === 'bowler'),
-      allrounders: list.filter(p => p.type.toLowerCase().includes('all-rounder')),
-    };
+  return {
+    batsmen: list.filter(p => {
+      const type = p.type.toLowerCase();
+      return type.includes('batsman') && !type.includes('all-rounder');
+    }),
+    bowlers: list.filter(p => {
+      const type = p.type.toLowerCase();
+      return type.includes('bowler') && !type.includes('all-rounder');
+    }),
+    allrounders: list.filter(p => {
+      const type = p.type.toLowerCase();
+      return (
+        type.includes('all-rounder') ||
+        type.includes('batting all-rounder') ||
+        type.includes('bowling all-rounder')
+      );
+    }),
   };
+};
 
   const unsoldPlayers = players.filter(p => !p.sold && p.bidded);
   const pendingPlayers = players.filter(p => !p.bidded);
@@ -62,12 +95,21 @@ function TeamView() {
   ];
 
   return (
+
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
-      <Link to="/">← Back to Auction Panel</Link>
+    <AnnouncementBanner
+      message={announcement}
+      visible={showAnnouncement}
+      onHide={() => setShowAnnouncement(false)}
+    />
+
+    <div style={{ padding: '20px', fontFamily: 'Arial' }}>
+    
+    
 
       <CurrentBidBox currentBid={currentBid} teams={teams} />
 
-      <h1 style={{ textAlign: 'center' }}>Team Overview</h1>
+      <h1 style={{ textAlign: 'center' }}>Auction Overview</h1>
 
       
 
@@ -111,6 +153,8 @@ function TeamView() {
                 <div style={{ flex: 1, paddingLeft: '10px' }}>
                   <h4>All-rounders</h4>
                   {allrounders.map((p, i) => (
+
+              
                     <div key={i}>{p.name} (${p.basePrice})</div>
                   ))}
                 </div>
@@ -129,13 +173,27 @@ function TeamView() {
               <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
                 <h4>Batsmen</h4>
                 {batsmen.map(p => (
-                  <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
+
+
                 ))}
               </div>
               <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
                 <h4>Bowlers</h4>
                 {bowlers.map(p => (
-                  <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
+
+
                 ))}
               </div>
               <div style={{ flex: 1, paddingLeft: '10px' }}>
@@ -156,13 +214,27 @@ function TeamView() {
               <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
                 <h4>Batsmen</h4>
                 {batsmen.map(p => (
-                  <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
+
+
                 ))}
               </div>
               <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
                 <h4>Bowlers</h4>
                 {bowlers.map(p => (
-                  <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+                  <div key={p.id}>
+  <strong>{p.name}</strong> (${p.basePrice})
+  {p.type?.toLowerCase().includes('wicket-keeper') && (
+    <span style={{ color: '#555', fontStyle: 'italic' }}> - {p.type}</span>
+  )}
+</div>
+
+
                 ))}
               </div>
               <div style={{ flex: 1, paddingLeft: '10px' }}>
@@ -175,6 +247,7 @@ function TeamView() {
           );
         })()}
       </div>
+    </div>
     </div>
   );
 }
