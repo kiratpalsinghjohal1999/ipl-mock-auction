@@ -1,3 +1,5 @@
+import AnnouncementBanner from './AnnouncementBanner';
+
 import { toast } from 'react-toastify';
 import { saveAs } from 'file-saver';
 import Papa from 'papaparse';
@@ -25,6 +27,8 @@ function Admin() {
   const [authenticated, setAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [storedAdminPassword, setStoredAdminPassword] = useState('');
+  const [announcement, setAnnouncement] = useState('');
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
 
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -81,6 +85,27 @@ function Admin() {
       unsubscribeBid();
     };
   }, []);
+
+  useEffect(() => {
+  const unsubscribe = onSnapshot(doc(db, 'auction', 'announcement'), (docSnap) => {
+    if (docSnap.exists()) {
+      const msg = docSnap.data().text || '';
+      if (msg) {
+        setAnnouncement(msg);
+        setShowAnnouncement(true);
+
+        // Auto-hide and clear message after 5 seconds
+        setTimeout(async () => {
+          setShowAnnouncement(false);
+          await setDoc(doc(db, 'auction', 'announcement'), { text: '' });
+        }, 2000);
+      }
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+
 
   const handleFileUpload = async (e) => {
   const file = e.target.files[0];
@@ -511,6 +536,15 @@ const generateAuctionReport = () => {
 
 
   return (
+    <div>
+    <AnnouncementBanner
+  message={announcement}
+  visible={showAnnouncement}
+  onHide={() => setShowAnnouncement(false)}
+/>
+
+    
+
     <div style={{ padding: '20px', fontFamily: 'Arial', display: 'flex', flexDirection: 'column', gap: '30px' }}>
 
      <CurrentBidBox currentBid={currentBid} teams={teams} />
@@ -758,6 +792,7 @@ const generateAuctionReport = () => {
         </div>
         
         
+      </div>
       </div>
     </div>
   );
