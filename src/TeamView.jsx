@@ -6,7 +6,7 @@ import CurrentBidBox from './CurrentBidBox';
 import AnnouncementBanner from './AnnouncementBanner';
 import Confetti from 'react-confetti';
 import { useWindowSize } from '@react-hook/window-size';
-
+import Footer from './Footer';
 
 
 
@@ -112,8 +112,9 @@ useEffect(() => {
 
   return (
 
-    <div style={{ padding: '20px', fontFamily: 'Arial' }}>
 
+    <div style={{ padding: '20px', fontFamily: 'Arial' }}>
+ <Footer />
 
       {showConfetti && (
   <div
@@ -141,9 +142,7 @@ useEffect(() => {
   <Confetti width={width} height={height} numberOfPieces={300} />
 )}
 
-
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
-    
     
 
       <CurrentBidBox currentBid={currentBid} teams={teams} />

@@ -4,6 +4,8 @@ import { toast } from 'react-toastify';
 import { saveAs } from 'file-saver';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import Footer from './Footer';
+
 
 import { useEffect, useState } from 'react';
 import { db } from './firebase';
@@ -537,6 +539,7 @@ const generateAuctionReport = () => {
 
   return (
     <div>
+      <Footer/>
     <AnnouncementBanner
   message={announcement}
   visible={showAnnouncement}
@@ -546,7 +549,7 @@ const generateAuctionReport = () => {
     
 
     <div style={{ padding: '20px', fontFamily: 'Arial', display: 'flex', flexDirection: 'column', gap: '30px' }}>
-
+    
      <CurrentBidBox currentBid={currentBid} teams={teams} />
 
 

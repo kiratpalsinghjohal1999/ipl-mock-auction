@@ -14,7 +14,7 @@ import CurrentBidBox from './CurrentBidBox';
 import AnnouncementBanner from './AnnouncementBanner';
 import Confetti from 'react-confetti';
 import { useWindowSize } from '@react-hook/window-size';
-
+import Footer from './Footer';
 
 function TeamPage() {
   const { owner } = useParams();
@@ -203,6 +203,7 @@ function TeamPage() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
+      <Footer/>
 
       {showConfetti && (
   <div
@@ -230,8 +231,8 @@ function TeamPage() {
   <Confetti width={width} height={height} numberOfPieces={300} />
 )}
 
-
-      <Link to="/teams">← Back to Team Overview</Link>
+<div style={{ marginTop: '10px',padding: '10px' }}> <Link  to="/teams">← Back to Team Overview</Link></div>
+     
       <h1 style={{ textAlign: 'center' }}>Team: {team?.Owner}</h1>
 
       <CurrentBidBox currentBid={currentBid} teams={teams} />
