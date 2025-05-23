@@ -538,7 +538,7 @@ const generateAuctionReport = () => {
 
 
   return (
-    <div>
+    <div style={{ paddingTop: "50px" }}>
       <Footer/>
     <AnnouncementBanner
   message={announcement}
