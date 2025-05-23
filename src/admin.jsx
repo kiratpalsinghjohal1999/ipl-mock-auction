@@ -1,3 +1,7 @@
+import { toast } from 'react-toastify';
+import { saveAs } from 'file-saver';
+import Papa from 'papaparse';
+
 import { useEffect, useState } from 'react';
 import { db } from './firebase';
 import {
@@ -5,17 +9,21 @@ import {
   addDoc,
   doc,
   updateDoc,
+  setDoc,
+  deleteDoc,
   onSnapshot,
   getDoc,
   arrayUnion,
   getDocs
 } from 'firebase/firestore';
+
 import { Link } from 'react-router-dom';
+import CurrentBidBox from './CurrentBidBox';
 
 function Admin() {
   const [authenticated, setAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-  const correctPassword = 'auction123';
+  const [storedAdminPassword, setStoredAdminPassword] = useState('');
 
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -23,8 +31,26 @@ function Admin() {
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [bidAmount, setBidAmount] = useState('');
+  const [currentBid, setCurrentBid] = useState(null);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [selectedCreditTeamId, setSelectedCreditTeamId] = useState('');
 
   useEffect(() => {
+    const fetchAdminPassword = async () => {
+      const docRef = doc(db, 'adminSettings', 'access');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        setStoredAdminPassword(snap.data().adminPassword || '');
+      }
+    };
+
+    const alreadyLoggedIn = sessionStorage.getItem('admin-authenticated') === 'true';
+    if (alreadyLoggedIn) {
+      setAuthenticated(true);
+    }
+
+    fetchAdminPassword();
+
     const unsubscribePlayers = onSnapshot(collection(db, 'players'), (snapshot) => {
       const playerList = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -41,11 +67,22 @@ function Admin() {
       setTeams(teamList);
     });
 
+    const unsubscribeBid = onSnapshot(doc(db, 'auction', 'currentBid'), (docSnap) => {
+      if (docSnap.exists()) {
+        setCurrentBid(docSnap.data());
+      } else {
+        setCurrentBid(null);
+      }
+    });
+
     return () => {
       unsubscribePlayers();
       unsubscribeTeams();
+      unsubscribeBid();
     };
   }, []);
+
+
 
   const handleAddPlayer = async () => {
     try {
@@ -64,48 +101,87 @@ function Admin() {
   };
 
   const assignPlayerToTeam = async () => {
-    try {
-      if (!selectedPlayerId || !selectedTeamId || !bidAmount) {
-        alert("Select a player, team, and enter bid amount.");
-        return;
-      }
+  if (!currentBid || !currentBid.playerId || !currentBid.highestBidder) {
+    alert("No active bidding or highest bidder not set.");
+    return;
+  }
 
-      const player = players.find(p => p.id === selectedPlayerId);
-      if (!player) {
-        alert("Player not found.");
-        return;
-      }
+  try {
+    const playerRef = doc(db, 'players', currentBid.playerId);
+    const teamRef = doc(db, 'Teams', currentBid.highestBidder);
 
-      const bid = Number(bidAmount);
-      const teamRef = doc(db, 'Teams', selectedTeamId);
-      const teamSnap = await getDoc(teamRef);
+    const playerSnap = await getDoc(playerRef);
+    const teamSnap = await getDoc(teamRef);
 
-      if (!teamSnap.exists()) {
-        alert("Team not found!");
-        return;
-      }
-
-      const team = teamSnap.data();
-      const remainingPurse = team.Purse - bid;
-      if (remainingPurse < 0) {
-        alert("Not enough purse!");
-        return;
-      }
-
-      await updateDoc(teamRef, {
-        Purse: remainingPurse,
-        players: arrayUnion({ name: player.name, basePrice: bid, type: player.type })
-      });
-      await updateDoc(doc(db, 'players', player.id), { sold: true, bidded: true });
-
-      alert(`Assigned ${player.name} to ${team.Owner} for $${bid}`);
-      setSelectedPlayerId('');
-      setSelectedTeamId('');
-      setBidAmount('');
-    } catch (error) {
-      console.error("Error assigning player:", error);
+    if (!playerSnap.exists() || !teamSnap.exists()) {
+      alert("Player or team not found.");
+      return;
     }
-  };
+
+    const player = playerSnap.data();
+    const team = teamSnap.data();
+
+    if (team.Purse < currentBid.currentBid) {
+      alert("Team does not have enough purse.");
+      return;
+    }
+
+    // Update team
+    await updateDoc(teamRef, {
+      Purse: team.Purse - currentBid.currentBid,
+      players: arrayUnion({
+        name: player.name,
+        basePrice: currentBid.currentBid,
+        type: player.type
+      })
+    });
+
+    // Update player status
+    await updateDoc(playerRef, {
+      sold: true,
+      bidded: true
+    });
+
+    await deleteDoc(doc(db, 'auction', 'currentBid')); // ❌ clear the doc fully
+
+
+    alert(`Player ${player.name} was bought by ${team.Owner} for $${currentBid.currentBid}`);
+  } catch (error) {
+    console.error("Error assigning player from bid:", error);
+  }
+};
+
+
+  const startBidding = async () => {
+  if (!selectedPlayerId || !bidAmount) {
+    alert("Select a player and enter a bid amount.");
+    return;
+  }
+
+  const player = players.find(p => p.id === selectedPlayerId);
+  if (!player) {
+    alert("Player not found.");
+    return;
+  }
+
+  try {
+    await setDoc(doc(db, 'auction', 'currentBid'), {
+      playerId: player.id,
+      name: player.name,
+      type: player.type,
+      currentBid: Number(bidAmount),
+      highestBidder: ''
+    });
+
+    alert(`Bidding started for ${player.name} at $${bidAmount}`);
+    setSelectedPlayerId('');
+    setBidAmount('');
+  } catch (error) {
+    console.error("Failed to start bidding:", error);
+  }
+};
+
+
 
   const resetSelection = () => {
     setSelectedPlayerId('');
@@ -166,20 +242,102 @@ function Admin() {
   };
 
   const markPlayerAsUnsold = async () => {
-    if (!selectedPlayerId) {
-      alert("Select a player to mark as unsold.");
+  if (!currentBid || !currentBid.playerId) {
+    alert("No player is currently being bid on.");
+    return;
+  }
+
+  try {
+    const playerRef = doc(db, 'players', currentBid.playerId);
+    const playerSnap = await getDoc(playerRef);
+
+    if (!playerSnap.exists()) {
+      alert("Player not found.");
       return;
     }
-    try {
-      await updateDoc(doc(db, 'players', selectedPlayerId), {
-        sold: false,
-        bidded: true
-      });
-      alert("Player marked as unsold.");
-    } catch (error) {
-      console.error("Error marking player as unsold:", error);
-    }
-  };
+
+    // Mark as unsold but bidded
+    await updateDoc(playerRef, {
+      sold: false,
+      bidded: true
+    });
+
+    // Clear the auction bid
+    await setDoc(doc(db, 'auction', 'currentBid'), {
+      playerId: '',
+      name: '',
+      type: '',
+      currentBid: 0,
+      highestBidder: ''
+    });
+
+    alert(`Player ${playerSnap.data().name} marked as unsold.`);
+  } catch (error) {
+    console.error("Error marking player as unsold:", error);
+  }
+};
+
+const generateAuctionReport = () => {
+  const rows = [];
+
+  teams.forEach(team => {
+    const players = team.players || [];
+    const totalSpent = players.reduce((sum, p) => sum + (p.basePrice || 0), 0);
+    const remainingPurse = team.Purse || 0;
+    const extra = team.extraCredits || 0;
+
+    // Push team header
+    rows.push([`Team: ${team.Owner}`, '', '', '', '']);
+    rows.push(['Player Name', 'Type', 'Price', '', '']);
+
+    players.forEach(player => {
+      rows.push([player.name, player.type, player.basePrice]);
+    });
+
+    rows.push(['', '', '']);
+    rows.push(['Total Spent', '', totalSpent]);
+    rows.push(['Remaining Purse', '', remainingPurse]);
+    rows.push(['Extra Credits', '', extra]);
+    rows.push([]); // Empty line between teams
+  });
+
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  saveAs(blob, 'auction-report.csv');
+};
+
+
+      const giveExtraCredits = async () => {
+  if (!selectedCreditTeamId || !creditAmount) {
+    alert("Select a team and enter credit amount.");
+    return;
+  }
+
+  const teamRef = doc(db, 'Teams', selectedCreditTeamId);
+  const teamSnap = await getDoc(teamRef);
+
+  if (!teamSnap.exists()) {
+    alert("Team not found.");
+    return;
+  }
+
+  const team = teamSnap.data();
+  const extra = Number(creditAmount);
+
+  const updatedPurse = team.Purse + extra;
+  const updatedCredits = (team.extraCredits || 0) + extra;
+
+  await updateDoc(teamRef, {
+    Purse: updatedPurse,
+    extraCredits: updatedCredits
+  });
+
+  alert(`${extra} credits added to ${team.Owner}.`);
+  setCreditAmount('');
+  setSelectedCreditTeamId('');
+};
+
+
 
   const resetAuction = async () => {
     const confirm1 = window.confirm("Are you sure you want to reset the auction?");
@@ -212,32 +370,80 @@ function Admin() {
   };
 
   if (!authenticated) {
-    return (
-      <div style={{ padding: '40px', fontFamily: 'Arial', textAlign: 'center' }}>
-        <h2>Enter Admin Password</h2>
-        <input
-          type="password"
-          placeholder="Password"
-          value={passwordInput}
-          onChange={e => setPasswordInput(e.target.value)}
-          style={{ padding: '8px', width: '200px' }}
-        />
-        <br /><br />
-        <button onClick={() => {
-          if (passwordInput === correctPassword) {
-            setAuthenticated(true);
-          } else {
-            alert('Incorrect password.');
-          }
-        }}>
-          Enter
-        </button>
-      </div>
-    );
-  }
+  return (
+    <div style={{ padding: '40px', fontFamily: 'Arial', textAlign: 'center' }}>
+      <h2>Enter Admin Password</h2>
+      <input
+        type="password"
+        placeholder="Password"
+        value={passwordInput}
+        onChange={e => setPasswordInput(e.target.value)}
+        style={{ padding: '8px', width: '200px' }}
+      />
+      <br /><br />
+      <button onClick={() => {
+        if (passwordInput === storedAdminPassword) {
+          setAuthenticated(true);
+          sessionStorage.setItem('admin-authenticated', 'true');
+        } else {
+          alert('Incorrect password.');
+        }
+      }}>
+        Enter
+      </button>
+    </div>
+  );
+}
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+
+     <CurrentBidBox currentBid={currentBid} teams={teams} />
+
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+          <h2>Auction Control Panel</h2>
+          <select value={selectedPlayerId} onChange={e => setSelectedPlayerId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
+            <option value="">-- Select a Player --</option>
+            {players.map(player => (
+              <option key={player.id} value={player.id}>{player.name} {player.sold ? "(Sold)" : ""}</option>
+            ))}
+          </select>
+          <input type="number" placeholder="Bid Amount" value={bidAmount} onChange={e => setBidAmount(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }} />
+          <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
+            <option value="">-- Select a Team --</option>
+            {teams.map(team => (
+              <option key={team.id} value={team.id}>{team.Owner} (${Number(team.Purse || 0).toLocaleString()})</option>
+            ))}
+          </select>
+          <br /><br />
+          <button
+            onClick={startBidding}
+            style={{ marginLeft: '5px', backgroundColor: 'purple', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Start Bidding
+        </button>
+          <button onClick={assignPlayerToTeam} style={{ padding: '10px 16px', fontSize: '16px', fontWeight: 'bold',backgroundColor: 'green', color: 'white' }}>Assign Player to Team</button>
+          <button onClick={resetSelection} style={{ marginLeft: '5px', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Reset</button>
+          <button onClick={markPlayerAsUnsold} style={{ marginLeft: '5px', backgroundColor: 'orange', color: 'white', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Mark as Unsold</button>
+          <button onClick={undoSold} style={{ marginLeft: '5px', backgroundColor: 'blue', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Undo Sold</button>
+          <button
+  onClick={generateAuctionReport}
+  style={{
+    marginTop: '20px',
+    backgroundColor: '#007bff',
+    color: 'white',
+    padding: '10px 16px',
+    fontSize: '16px',
+    fontWeight: 'bold'
+  }}
+>
+  Generate Auction Report
+</button>
+
+          <button onClick={resetAuction} style={{ marginLeft: '5px', backgroundColor: 'red', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Reset Auction</button>
+        </div>
+
+
+
       <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
         {['Pending Players (Not Yet Bid)', 'Sold Players', 'Unsold Players'].map((category, i) => {
           const list = i === 0
@@ -266,35 +472,44 @@ function Admin() {
           <input type="text" placeholder="Type (e.g., Batsman)" value={newPlayer.type} onChange={e => setNewPlayer({ ...newPlayer, type: e.target.value })} />
           <button onClick={handleAddPlayer} style={{ padding: '10px 16px', fontSize: '16px', marginTop: '10px' }}>Add Player</button>
 
+          <h2>Add Extra Credits to Team</h2>
+  <select
+    value={selectedCreditTeamId}
+    onChange={e => setSelectedCreditTeamId(e.target.value)}
+    style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}
+  >
+    <option value="">-- Select a Team --</option>
+    {teams.map(team => (
+      <option key={team.id} value={team.id}>
+        {team.Owner} (${team.Purse} purse, +${team.extraCredits || 0} credited)
+      </option>
+    ))}
+  </select>
+  <input
+    type="number"
+    placeholder="Amount to Credit"
+    value={creditAmount}
+    onChange={e => setCreditAmount(e.target.value)}
+    style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}
+  />
+  <br />
+  <button
+    onClick={giveExtraCredits}
+    style={{ backgroundColor: '#6200ee', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}
+  >
+    Credit Team
+  </button>
+
           <br /><br />
           <Link to="/teams">Go to Team View</Link> | <Link to="/round2">Go to Round 2</Link>
         </div>
-
-        <div style={{ flex: 1 }}>
-          <h2>Auction Control Panel</h2>
-          <select value={selectedPlayerId} onChange={e => setSelectedPlayerId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
-            <option value="">-- Select a Player --</option>
-            {players.map(player => (
-              <option key={player.id} value={player.id}>{player.name} {player.sold ? "(Sold)" : ""}</option>
-            ))}
-          </select>
-          <input type="number" placeholder="Bid Amount" value={bidAmount} onChange={e => setBidAmount(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }} />
-          <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }}>
-            <option value="">-- Select a Team --</option>
-            {teams.map(team => (
-              <option key={team.id} value={team.id}>{team.Owner} (${Number(team.Purse || 0).toLocaleString()})</option>
-            ))}
-          </select>
-          <br /><br />
-          <button onClick={assignPlayerToTeam} style={{ padding: '10px 16px', fontSize: '16px', fontWeight: 'bold',backgroundColor: 'green', color: 'white' }}>Assign Player to Team</button>
-          <button onClick={resetSelection} style={{ marginLeft: '5px', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Reset</button>
-          <button onClick={markPlayerAsUnsold} style={{ marginLeft: '5px', backgroundColor: 'orange', color: 'white', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Mark as Unsold</button>
-          <button onClick={undoSold} style={{ marginLeft: '5px', backgroundColor: 'blue', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Undo Sold</button>
-          <button onClick={resetAuction} style={{ marginLeft: '5px', backgroundColor: 'red', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Reset Auction</button>
-        </div>
+        
+        
       </div>
     </div>
   );
+
+  return null;
 }
 
 export default Admin;

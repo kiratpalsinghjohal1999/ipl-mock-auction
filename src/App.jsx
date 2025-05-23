@@ -1,20 +1,36 @@
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+// inside <React.StrictMode> → <Router> → somewhere at the top level:
+<ToastContainer position="top-center" autoClose={3000} />
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-// import App from './App';
 import TeamView from './TeamView';
 import Round2 from './Round2';
 import Admin from './admin';
 
+
+////////////////////
+import TeamPage from './TeamPage';
+////////////////
+
+
+
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Router>
-      <Routes>
-        <Route path="/admin" element={<Admin />} />      {/* 👈 admin access only */}
-        <Route path="/teams" element={<TeamView />} />
-        <Route path="/round2" element={<Round2 />} />
-        <Route path="/" element={<TeamView />} />       {/* 👈 default fallback */}
-      </Routes>
-    </Router>
-  </React.StrictMode>
+  <Router>
+    <ToastContainer position="top-center" autoClose={5000} />
+    <Routes>
+      <Route path="/admin" element={<Admin />} />
+      <Route path="/teams" element={<TeamView />} />
+      <Route path="/round2" element={<Round2 />} />
+      <Route path="/" element={<TeamView />} />
+      <Route path="/team/:owner" element={<TeamPage />} />
+    </Routes>
+  </Router>
+</React.StrictMode>
+
 );
