@@ -8,7 +8,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import TeamView from './TeamView';
-import Round2 from './Round2';
 import Admin from './admin';
 
 
@@ -26,7 +25,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <Routes>
       <Route path="/admin" element={<Admin />} />
       <Route path="/teams" element={<TeamView />} />
-      <Route path="/round2" element={<Round2 />} />
+      <Route path="/team/:owner" element={<TeamPage />} />
+
       <Route path="/" element={<TeamView />} />
       <Route path="/team/:owner" element={<TeamPage />} />
     </Routes>

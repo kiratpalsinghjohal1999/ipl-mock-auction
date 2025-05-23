@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 const AnnouncementBanner = ({ message, visible, onHide }) => {
   useEffect(() => {
     if (visible) {
-      const timeout = setTimeout(() => onHide(), 4000); // auto-hide after 5s
+      const timeout = setTimeout(() => onHide(), 3000); // auto-hide after 5s
       return () => clearTimeout(timeout);
     }
   }, [visible, onHide]);
@@ -27,7 +27,7 @@ const styles = {
     width: '100vw',
     height: '100vh',
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    zIndex: 9999,
+    zIndex: 9998,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

@@ -14,7 +14,13 @@ function CurrentBidBox({ currentBid, teams }) {
       ) : (
         <>
           <h2>Currently Bidding:</h2>
-          <p><strong>Player:</strong> {currentBid.name} ({currentBid.type})</p>
+          <p>
+  <strong>Player:</strong>{' '}
+  <span style={{ color: 'red', fontWeight: 'bold', fontSize: '18px' }}>
+    {currentBid.name}
+  </span>{' '}
+  ({currentBid.type})
+</p>
           <p><strong>Current Bid:</strong> ${currentBid.currentBid}</p>
           <p><strong>Highest Bidder:</strong> {teams.find(t => t.id === currentBid.highestBidder)?.Owner || 'No Team'}</p>
         </>

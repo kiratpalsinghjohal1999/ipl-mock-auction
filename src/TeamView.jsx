@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { db } from './firebase';
-import { collection, onSnapshot, doc } from 'firebase/firestore';
+import { collection, onSnapshot, doc,setDoc } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
 import CurrentBidBox from './CurrentBidBox';
 import AnnouncementBanner from './AnnouncementBanner';
+import Confetti from 'react-confetti';
+import { useWindowSize } from '@react-hook/window-size';
+
 
 
 
@@ -11,9 +14,10 @@ function TeamView() {
   const [teams, setTeams] = useState([]);
   const [players, setPlayers] = useState([]);
   const [currentBid, setCurrentBid] = useState(null);
-
+  const [width, height] = useWindowSize();
   const [announcement, setAnnouncement] = useState('');
 const [showAnnouncement, setShowAnnouncement] = useState(false);
+const [showConfetti, setShowConfetti] = useState(false);
 
 useEffect(() => {
   const unsubscribe = onSnapshot(doc(db, 'auction', 'announcement'), (docSnap) => {
@@ -22,12 +26,24 @@ useEffect(() => {
       if (msg) {
         setAnnouncement(msg);
         setShowAnnouncement(true);
+          // Show confetti only if it's a 'was sold' message
+        if (msg.includes("was sold")) {
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 3500);
+        }
+
+        // Auto-hide and clear from Firestore after 5 seconds
+        setTimeout(async () => {
+          setShowAnnouncement(false);
+          await setDoc(doc(db, 'auction', 'announcement'), { text: '' }); // Clear message in DB
+        }, 4000);
       }
     }
   });
 
   return () => unsubscribe();
 }, []);
+
 
 
 
@@ -97,11 +113,34 @@ useEffect(() => {
   return (
 
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
+
+
+      {showConfetti && (
+  <div
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      zIndex: 99999, // highest layer
+      pointerEvents: 'none'
+    }}
+  >
+    <Confetti width={width} height={height} numberOfPieces={300} />
+  </div>
+)}
+
+
     <AnnouncementBanner
       message={announcement}
       visible={showAnnouncement}
       onHide={() => setShowAnnouncement(false)}
     />
+    {showAnnouncement && announcement.includes("was sold") && (
+  <Confetti width={width} height={height} numberOfPieces={300} />
+)}
+
 
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
     
@@ -135,7 +174,9 @@ useEffect(() => {
                 flexDirection: 'column'
               }}
             >
-              <h2>{team.Owner}</h2>
+              <h2><Link to={`/team/${encodeURIComponent(team.Owner)}`} style={{ textDecoration: 'none', color: 'inherit' }}>{team.Owner}</Link>
+              </h2>
+
               <p><strong>Remaining Purse:</strong> ${team.Purse?.toLocaleString() || 0}</p>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '15px', flexGrow: 1 }}>
                 <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>

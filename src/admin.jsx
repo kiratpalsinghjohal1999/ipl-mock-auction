@@ -230,12 +230,28 @@ function Admin() {
 };
 
 
-
-  const resetSelection = () => {
-    setSelectedPlayerId('');
-    setSelectedTeamId('');
-    setBidAmount('');
+const categorize = (list) => {
+  return {
+    batsmen: list.filter(p => {
+      const type = p.type?.toLowerCase() || '';
+      return type.includes('batsman') && !type.includes('all-rounder');
+    }),
+    bowlers: list.filter(p => {
+      const type = p.type?.toLowerCase() || '';
+      return type.includes('bowler') && !type.includes('all-rounder');
+    }),
+    allrounders: list.filter(p => {
+      const type = p.type?.toLowerCase() || '';
+      return (
+        type.includes('all-rounder') ||
+        type.includes('batting all-rounder') ||
+        type.includes('bowling all-rounder')
+      );
+    }),
   };
+};
+
+
 
   const undoSold = async () => {
     if (!selectedPlayerId) {
@@ -419,6 +435,9 @@ const generateAuctionReport = () => {
 
 
       await Promise.all([...playerUpdates, ...teamUpdates]);
+
+      await deleteDoc(doc(db, 'auction', 'currentBid'));
+
       alert('Auction has been reset. All players and teams have been reset.');
     } catch (error) {
       console.error("Error resetting auction:", error);
@@ -450,6 +469,11 @@ const generateAuctionReport = () => {
     </div>
   );
 }
+  const pendingPlayers = players.filter(p => !p.bidded);
+  const soldPlayers = players.filter(p => p.bidded && p.sold);
+  const unsoldPlayers = players.filter(p => p.bidded && !p.sold);
+
+
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial', display: 'flex', flexDirection: 'column', gap: '30px' }}>
@@ -490,7 +514,6 @@ const generateAuctionReport = () => {
             style={{ marginLeft: '5px', backgroundColor: 'purple', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Start Bidding
         </button>
           <button onClick={assignPlayerToTeam} style={{ padding: '10px 16px', fontSize: '16px', fontWeight: 'bold',backgroundColor: 'green', color: 'white' }}>Sell Player</button>
-          <button onClick={resetSelection} style={{ marginLeft: '5px', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Reset</button>
           <button onClick={markPlayerAsUnsold} style={{ marginLeft: '5px', backgroundColor: 'orange', color: 'white', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Mark as Unsold</button>
           <button onClick={undoSold} style={{ marginLeft: '5px', backgroundColor: 'blue', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Undo Sold</button>
           <button
@@ -512,25 +535,119 @@ const generateAuctionReport = () => {
 
 
 
-      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-        {['Pending Players (Not Yet Bid)', 'Sold Players', 'Unsold Players'].map((category, i) => {
-          const list = i === 0
-            ? players.filter(p => !p.bidded)
-            : i === 1
-              ? players.filter(p => p.sold && p.bidded)
-              : players.filter(p => !p.sold && p.bidded);
-          return (
-            <div key={category} style={{ flex: 1, minWidth: '250px', maxHeight: '200px', overflowY: 'auto', border: '1px solid #ccc', padding: '10px' }}>
-              <h2>{category}</h2>
-              <ul>
-                {list.map(player => (
-                  <li key={player.id}><strong>{player.name}</strong> - ${player.basePrice} - {player.type}</li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
+      
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+
+  <h2 style={{ marginBottom: '10px' }}>Pending Players (Not Yet Bid)</h2>
+<div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+  {(() => {
+    const { batsmen, bowlers, allrounders } = categorize(pendingPlayers);
+    return (
+      <>
+        <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+          <h4>Batsmen</h4>
+          {batsmen.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+        <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+          <h4>Bowlers</h4>
+          {bowlers.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+        <div style={{ flex: 1, paddingLeft: '10px' }}>
+          <h4>All-rounders</h4>
+          {allrounders.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+      </>
+    );
+  })()}
+</div>
+<div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+ </div>
+
+</div>
+      
+  
+
+
+
+
+
+
+<div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+
+  <h2 style={{ marginBottom: '10px' }}>Sold Players (Not Yet Bid)</h2>
+<div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+  {(() => {
+    const { batsmen, bowlers, allrounders } = categorize(soldPlayers);
+    return (
+      <>
+        <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+          <h4>Batsmen</h4>
+          {batsmen.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+        <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+          <h4>Bowlers</h4>
+          {bowlers.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+        <div style={{ flex: 1, paddingLeft: '10px' }}>
+          <h4>All-rounders</h4>
+          {allrounders.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+      </>
+    );
+  })()}
+</div>
+<div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+ </div>
+
+</div>
+
+
+<div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+
+  <h2 style={{ marginBottom: '10px' }}>Unsold Players (Not Yet Bid)</h2>
+<div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+  {(() => {
+    const { batsmen, bowlers, allrounders } = categorize(unsoldPlayers);
+    return (
+      <>
+        <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+          <h4>Batsmen</h4>
+          {batsmen.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+        <div style={{ flex: 1, borderRight: '1px solid #ccc', paddingRight: '10px' }}>
+          <h4>Bowlers</h4>
+          {bowlers.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+        <div style={{ flex: 1, paddingLeft: '10px' }}>
+          <h4>All-rounders</h4>
+          {allrounders.map(p => (
+            <div key={p.id}><strong>{p.name}</strong> (${p.basePrice})</div>
+          ))}
+        </div>
+      </>
+    );
+  })()}
+</div>
+<div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+ </div>
+
+</div>
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
@@ -589,7 +706,7 @@ const generateAuctionReport = () => {
   </button>
 
           <br /><br />
-          <Link to="/teams">Go to Team View</Link> | <Link to="/round2">Go to Round 2</Link>
+          <Link to="/teams">Go to Team View</Link>
         </div>
         
         

@@ -4,6 +4,7 @@ import {
   collection,
   onSnapshot,
   doc,
+  setDoc,
   updateDoc,
   getDoc,
   getDocs
@@ -11,10 +12,12 @@ import {
 import { useParams, Link } from 'react-router-dom';
 import CurrentBidBox from './CurrentBidBox';
 import AnnouncementBanner from './AnnouncementBanner';
+import Confetti from 'react-confetti';
+import { useWindowSize } from '@react-hook/window-size';
+
 
 function TeamPage() {
   const { owner } = useParams();
-
   const [authenticated, setAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [storedPassword, setStoredPassword] = useState('');
@@ -23,19 +26,35 @@ function TeamPage() {
   const [currentBid, setCurrentBid] = useState(null);
   const [announcement, setAnnouncement] = useState('');
   const [showAnnouncement, setShowAnnouncement] = useState(false);
+  const { width, height } = useWindowSize(); // ✅ This is now inside the component
+  const [showConfetti, setShowConfetti] = useState(false);
+
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'auction', 'announcement'), (docSnap) => {
-      if (docSnap.exists()) {
-        const msg = docSnap.data().text || '';
-        if (msg) {
-          setAnnouncement(msg);
-          setShowAnnouncement(true);
+  const unsubscribe = onSnapshot(doc(db, 'auction', 'announcement'), (docSnap) => {
+    if (docSnap.exists()) {
+      const msg = docSnap.data().text || '';
+      if (msg) {
+        setAnnouncement(msg);
+        setShowAnnouncement(true);
+          // Show confetti only if it's a 'was sold' message
+        if (msg.includes("was sold")) {
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 3500);
         }
+
+        // Auto-hide and clear from Firestore after 5 seconds
+        setTimeout(async () => {
+          setShowAnnouncement(false);
+          await setDoc(doc(db, 'auction', 'announcement'), { text: '' }); // Clear message in DB
+        }, 4000);
       }
-    });
-    return () => unsubscribe();
-  }, []);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+
 
   useEffect(() => {
     const fetchPassword = async () => {
@@ -100,16 +119,25 @@ function TeamPage() {
   const pendingPlayers = players.filter(p => !p.bidded);
 
   const incrementBid = async (amount) => {
-    if (!currentBid || !team?.id) return;
-    const newBid = currentBid.currentBid + amount;
-    await updateDoc(doc(db, 'auction', 'currentBid'), {
-      currentBid: newBid,
-      highestBidder: team.id,
-      playerId: currentBid.playerId,
-      name: currentBid.name,
-      type: currentBid.type
-    });
-  };
+  if (!currentBid || !team?.id) return;
+  const newBid = currentBid.currentBid + amount;
+  const playerId = currentBid.playerId;
+
+  await updateDoc(doc(db, 'auction', 'currentBid'), {
+    currentBid: newBid,
+    highestBidder: team.id,
+    playerId: playerId,
+    name: currentBid.name,
+    type: currentBid.type
+  });
+
+  // Show announcement
+  await setDoc(doc(db, 'auction', 'announcement'), {
+  text: `${team.Owner} increased the bid to $${newBid} for ${currentBid.name}`
+});
+
+};
+
 
   const finalizeBid = async () => {
     if (!currentBid) return;
@@ -175,14 +203,36 @@ function TeamPage() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
+
+      {showConfetti && (
+  <div
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      zIndex: 99999, // highest layer
+      pointerEvents: 'none'
+    }}
+  >
+    <Confetti width={width} height={height} numberOfPieces={300} />
+  </div>
+)}
+
+
       <AnnouncementBanner
         message={announcement}
         visible={showAnnouncement}
         onHide={() => setShowAnnouncement(false)}
       />
+      {showAnnouncement && announcement.includes("was sold") && (
+  <Confetti width={width} height={height} numberOfPieces={300} />
+)}
+
 
       <Link to="/teams">← Back to Team Overview</Link>
-      <h1 style={{ textAlign: 'center' }}>Your Team: {team?.Owner}</h1>
+      <h1 style={{ textAlign: 'center' }}>Team: {team?.Owner}</h1>
 
       <CurrentBidBox currentBid={currentBid} teams={teams} />
 
