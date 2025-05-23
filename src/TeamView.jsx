@@ -148,7 +148,7 @@ useEffect(() => {
 
       <CurrentBidBox currentBid={currentBid} teams={teams} />
 
-      <h1 style={{ textAlign: 'center' }}>Auction Overview</h1>
+      <h1 style={{ textAlign: 'center' }}>BPL 3.0 Auction 2025</h1>
 
       
 
@@ -206,7 +206,7 @@ useEffect(() => {
       </div>
 
       <div style={{ marginTop: '40px' }}>
-        <h2>Pending Players</h2>
+        <h2 style={{  color:'Red' }}>Upcoming Players </h2>
         {(() => {
           const { batsmen, bowlers, allrounders } = categorize(pendingPlayers);
           return (
@@ -246,8 +246,8 @@ useEffect(() => {
             </div>
           );
         })()}
-
-        <h2 style={{ marginTop: '30px' }}>Unsold Players</h2>
+        <h2 style={{  marginTop: '30px',color:'#FFA500' }}>Unsold Players</h2>
+      
         {(() => {
           const { batsmen, bowlers, allrounders } = categorize(unsoldPlayers);
           return (

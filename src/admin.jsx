@@ -120,6 +120,17 @@ function Admin() {
   reader.readAsArrayBuffer(file);
 };
 
+const handleRandomPlayer = () => {
+  const pending = players.filter(p => !p.bidded);
+  if (pending.length === 0) {
+    alert("No pending players left.");
+    return;
+  }
+
+  const random = pending[Math.floor(Math.random() * pending.length)];
+  setSelectedPlayerId(random.id);
+  setBidAmount(random.basePrice); // Auto fill base price
+};
 
 
   const handleAddPlayer = async () => {
@@ -229,6 +240,27 @@ function Admin() {
   }
 };
 
+const handleStartRound2 = async () => {
+  const unsoldPlayers = players.filter(p => !p.sold && p.bidded);
+
+  if (unsoldPlayers.length === 0) {
+    alert("No unsold players to move to Round 2.");
+    return;
+  }
+
+  try {
+    const updates = unsoldPlayers.map(p =>
+      updateDoc(doc(db, 'players', p.id), {
+        bidded: false // ✅ Reset only bidded
+      })
+    );
+    await Promise.all(updates);
+    alert('Round 2 started: Unsold players moved back to pending.');
+  } catch (error) {
+    console.error("Error starting Round 2:", error);
+  }
+};
+ 
 
 const categorize = (list) => {
   return {
@@ -425,13 +457,16 @@ const generateAuctionReport = () => {
         })
       );
 
-      const teamUpdates = teamSnapshot.docs.map(docSnap =>
-  updateDoc(doc(db, 'Teams', docSnap.id), {
-    Purse: 250,
+      const teamUpdates = teamSnapshot.docs.map(docSnap => {
+  const teamData = docSnap.data();
+  const initialPurse = teamData.initialPurse || 250; // fallback if missing
+  return updateDoc(doc(db, 'Teams', docSnap.id), {
+    Purse: initialPurse,
     players: [],
-    extraCredits: 0  // ✅ Reset extra credits too
-  })
-);
+    extraCredits: 0
+  });
+});
+
 
 
       await Promise.all([...playerUpdates, ...teamUpdates]);
@@ -508,6 +543,12 @@ const generateAuctionReport = () => {
 
           <input type="number" placeholder="Bid Amount" value={bidAmount} onChange={e => setBidAmount(e.target.value)} style={{ padding: '8px', fontSize: '16px', marginBottom: '8px' }} />
           <br /><br />
+          <button
+  onClick={handleRandomPlayer}
+  style={{ backgroundColor: '#17a2b8', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}
+>
+  Pick Random Player
+</button>
 
           <button
             onClick={startBidding}
@@ -516,6 +557,13 @@ const generateAuctionReport = () => {
           <button onClick={assignPlayerToTeam} style={{ padding: '10px 16px', fontSize: '16px', fontWeight: 'bold',backgroundColor: 'green', color: 'white' }}>Sell Player</button>
           <button onClick={markPlayerAsUnsold} style={{ marginLeft: '5px', backgroundColor: 'orange', color: 'white', padding: '10px 16px', fontSize: '16px',fontWeight: 'bold' }}>Mark as Unsold</button>
           <button onClick={undoSold} style={{ marginLeft: '5px', backgroundColor: 'blue', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}>Undo Sold</button>
+          <button
+  onClick={handleStartRound2}
+  style={{ backgroundColor: '#6c757d', color: 'white', padding: '10px 16px', fontSize: '16px', fontWeight: 'bold' }}
+>
+  Start Round 2
+</button>
+
           <button
   onClick={generateAuctionReport}
   style={{
@@ -536,10 +584,10 @@ const generateAuctionReport = () => {
 
 
       
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-
-  <h2 style={{ marginBottom: '10px' }}>Pending Players (Not Yet Bid)</h2>
-<div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
+        <div style={{  gap: '20px', flexWrap: 'wrap' }}>
+  
+ <div style={{ }}> <h2 style={{ marginBottom: '10px', color:'Red' }}>Pending Players (Not Yet Bid)</h2></div>
+<div style={{ display: 'flex', marginTop: '10px', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
   {(() => {
     const { batsmen, bowlers, allrounders } = categorize(pendingPlayers);
     return (
@@ -578,9 +626,9 @@ const generateAuctionReport = () => {
 
 
 
-<div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+<div style={{  gap: '20px', flexWrap: 'wrap' }}>
 
-  <h2 style={{ marginBottom: '10px' }}>Sold Players (Not Yet Bid)</h2>
+  <h2 style={{ marginBottom: '10px', color:'Green' }}>Sold Players</h2>
 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
   {(() => {
     const { batsmen, bowlers, allrounders } = categorize(soldPlayers);
@@ -614,9 +662,9 @@ const generateAuctionReport = () => {
 </div>
 
 
-<div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+<div style={{ gap: '20px', flexWrap: 'wrap' }}>
 
-  <h2 style={{ marginBottom: '10px' }}>Unsold Players (Not Yet Bid)</h2>
+  <h2 style={{ marginBottom: '10px', color:'#FFA500' }}>Unsold Players </h2>
 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', maxHeight: '300px', overflowY: 'auto' }}>
   {(() => {
     const { batsmen, bowlers, allrounders } = categorize(unsoldPlayers);
